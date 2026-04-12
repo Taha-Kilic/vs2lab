@@ -16,6 +16,11 @@ class Server:
     """ The server """
     _logger = logging.getLogger("vs2lab.lab1.clientserver.Server")
     _serving = True
+    _telefonbuch = {
+        "Alice" : "0721 111",
+        "Bob" : "0721 222",
+        "Chris" : "0721 333",
+    }
 
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -35,8 +40,14 @@ class Server:
                     data = connection.recv(1024)  # receive data from client
                     if not data:
                         break  # stop if client stopped
-                    connection.send(data + "*".encode('ascii'))  # return sent data plus an "*"
-                connection.close()  # close the connection
+                    msg = data.decode('ascii')
+                    if msg.startswith("GET "):
+                        name = msg[4:]
+                        result = self._telefonbuch.get(name, "nicht gefunden")
+                        connection.send(result.encode('ascii'))
+                    elif msg == "GETALL":
+                        result = str(self._telefonbuch)
+                        connection.send(result.encode('ascii'))
             except socket.timeout:
                 pass  # ignore timeouts
         self.sock.close()
@@ -61,6 +72,19 @@ class Client:
         self.sock.close()  # close the connection
         self.logger.info("Client down.")
         return msg_out
+
+    def get(self, name):
+        self.sock.send(("GET " + name).encode('ascii'))
+        data = self.sock.recv(1024)
+        #self.sock.close()
+        return data.decode('ascii')
+
+    def get_all(self):
+        self.sock.send("GETALL".encode('ascii'))
+        data = self.sock.recv(4096)
+        #self.sock.close()
+        return data.decode('ascii')
+
 
     def close(self):
         """ Close socket """
