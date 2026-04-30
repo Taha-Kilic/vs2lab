@@ -48,7 +48,6 @@ class Client:
         print("[Client] warte nebenbei auf Ergebnis...")
         result = self.chan.receive_from(self.server)  # wait for response
         sender, result_data = result
-        print(f"[Client] Ergebnis erhalten: {result_data.value}")
 
         callback(result_data)
 
