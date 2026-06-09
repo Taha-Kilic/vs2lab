@@ -10,6 +10,7 @@ Chord Application
 import logging
 import sys
 import multiprocessing as mp
+import random
 
 import chordnode as chord_node
 import constChord
@@ -29,10 +30,41 @@ class DummyChordClient:
         self.channel.bind(self.node_id)
 
     def run(self):
-        print("Implement me pls...")
-        self.channel.send_to(  # a final multicast
-            {i.decode() for i in list(self.channel.channel.smembers('node'))},
-            constChord.STOP)
+        m = self.channel.n_bits
+        search_key = random.randint(0, (2**m) - 1)
+
+        # 2. Liste aller aktiven Knoten aus Redis holen
+        nodes = list(self.channel.channel.smembers('node'))
+        
+        # 3. Zufälligen Startknoten auswählen und SAUBER decodieren (aus b'4' wird '4')
+        raw_node = random.choice(nodes)
+        start_node = raw_node.decode('utf-8') if isinstance(raw_node, bytes) else str(raw_node)
+
+        print(f"\n[Client] Starte Suche nach Key {search_key} über Einstiegsknoten {int(start_node):04n}...")
+
+        # 4. Suchanfrage (LOOKUP_REQ) an den Startknoten senden
+        # - [start_node] ist eine Liste mit Strings
+        # - (constChord.LOOKUP_REQ, search_key, self.node_id) ist EIN Tupel
+        self.channel.send_to([start_node], (constChord.LOOKUP_REQ, search_key, self.node_id))
+
+        # 5. Auf das endrekursive Ergebnis warten
+        message = self.channel.receive_from_any()
+        sender = message[0]
+        response = message[1]
+
+        # 6. Ergebnis auswerten und Erfolgsmeldung ausgeben
+        if response[0] == constChord.LOOKUP_REP:
+            found_node = response[1]
+            print(f"[Client] ERFOLG! Knoten {found_node:04n} ist zuständig für den Key {search_key}.\n")
+
+        # 7. System ordnungsgemäß herunterfahren (Multicast STOP an alle Knoten)
+        # Auch hier müssen wir sicherstellen, dass die Byte-Objekte aus Redis decodiert werden!
+        self.channel.send_to(  
+            {i.decode('utf-8') if isinstance(i, bytes) else str(i) for i in nodes},
+            constChord.STOP
+        )
+
+
 
 
 def create_and_run(num_bits, node_class, enter_bar, run_bar):
